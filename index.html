@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chouhan's Family Tree</title>
-    <!-- Professional Genealogy Engine -->
-    <script src="https://balkan.app/js/FamilyTree.js"></script>
+    
+    <!-- 100% Free & Open Source Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@5.16.0/dist/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dtree@3.1.1/dtree.min.js"></script>
+    
     <style>
         body, html {
             width: 100%;
@@ -16,7 +20,7 @@
             background-color: #f4f4f9;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Engine handles its own drag/pan */
+            overflow: hidden; /* SVG handles its own dragging */
         }
         header {
             background-color: #2c3e50;
@@ -29,6 +33,7 @@
         }
         header h1 { margin: 0; font-size: 24px; }
         header p { margin: 5px 0 0 0; font-size: 14px; color: #ecf0f1; }
+        .instructions { margin-top: 8px; font-size: 13px; color: #bdc3c7; font-style: italic; }
         
         #langToggle {
             position: absolute;
@@ -45,10 +50,38 @@
         }
         #langToggle:hover { background-color: #c0392b; }
         
-        #tree {
+        #graph {
             width: 100%;
             flex-grow: 1;
+            background: white;
         }
+
+        /* Free Tree Styling */
+        .linage {
+            fill: none;
+            stroke: #7f8c8d;
+            stroke-width: 2px;
+        }
+        .marriage {
+            fill: none;
+            stroke: #7f8c8d;
+            stroke-width: 2px;
+            stroke-dasharray: 4,4;
+        }
+        .node {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            border-radius: 6px;
+            font-size: 13px;
+            padding: 5px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            line-height: 1.2;
+        }
+        .man { background-color: #cce5ff; border: 2px solid #004085; color: #004085; }
+        .woman { background-color: #f8d7da; border: 2px solid #721c24; color: #721c24; }
     </style>
 </head>
 <body>
@@ -57,38 +90,45 @@
         <button id="langToggle" onclick="toggleLanguage()">हिंदी में देखें</button>
         <h1 id="mainTitle">Chouhan's Family Tree</h1>
         <p id="subTitle">Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP</p>
+        <div class="instructions" id="instructionText">Scroll to zoom, click and drag to navigate.</div>
     </header>
 
-    <div id="tree"></div>
+    <div id="graph">
+        <p id="loadingText" style="padding: 20px; text-align: center;">Loading family tree data...</p>
+    </div>
 
     <script>
         window.currentLang = 'en';
         window.gedcomData = null;
-        let familyTreeInstance = null;
 
         const textContent = {
             en: {
                 toggleBtn: "हिंदी में देखें",
                 title: "Chouhan's Family Tree",
                 subTitle: "Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP",
+                instructions: "Scroll to zoom, click and drag to navigate.",
+                loading: "Loading family tree data...",
                 unknown: "Unknown"
             },
             hi: {
                 toggleBtn: "View in English",
                 title: "चौहान परिवार की वंशावली",
                 subTitle: "पनई से आए चौहान की वंशावली, ग्राम सदलीपुर, पोस्ट ईश्वरदास पुर, तहसील डलमऊ, ज़िला - रायबरेली, यूपी",
+                instructions: "ज़ूम करने के लिए स्क्रॉल करें, नेविगेट करने के लिए क्लिक करके खींचें।",
+                loading: "वंशावली डेटा लोड हो रहा है...",
                 unknown: "अज्ञात (Unknown)"
             }
         };
 
-        function parseGEDCOMToFamilyTreeJS(data, lang) {
+        // Convert GEDCOM into the specific hierarchical JSON format required by the free dTree library
+        function parseGEDCOMToDTree(data, lang) {
             const lines = data.split('\n');
             const indi = {};
             const fam = {};
             let currentType = null;
             let currentId = null;
 
-            // Step 1: Read raw data
+            // 1. Read GEDCOM
             lines.forEach(line => {
                 const p = line.trim().split(/\s+/);
                 if (p.length < 2) return;
@@ -98,7 +138,7 @@
                     if (p[2] === 'INDI') {
                         currentType = 'INDI';
                         currentId = p[1].replace(/@/g, '');
-                        indi[currentId] = { id: currentId, name: '', gender: 'male', pids: [], famc: [] };
+                        indi[currentId] = { id: currentId, name: '', sex: 'M', famc: [] };
                     } else if (p[2] === 'FAM') {
                         currentType = 'FAM';
                         currentId = p[1].replace(/@/g, '');
@@ -107,16 +147,9 @@
                         currentType = null;
                     }
                 } else if (currentType === 'INDI') {
-                    if (level === '1' && p[1] === 'NAME') {
-                        let parsedName = p.slice(2).join(' ').replace(/\//g, '').replace(/"/g, '').trim();
-                        if (parsedName !== '') indi[currentId].name = parsedName;
-                    }
-                    if (level === '1' && p[1] === 'SEX') {
-                        indi[currentId].gender = p[2] === 'F' ? 'female' : 'male';
-                    }
-                    if (level === '1' && p[1] === 'FAMC') {
-                        indi[currentId].famc.push(p[2].replace(/@/g, ''));
-                    }
+                    if (level === '1' && p[1] === 'NAME') indi[currentId].name = p.slice(2).join(' ').replace(/\//g, '').replace(/"/g, '').trim();
+                    if (level === '1' && p[1] === 'SEX') indi[currentId].sex = p[2];
+                    if (level === '1' && p[1] === 'FAMC') indi[currentId].famc.push(p[2].replace(/@/g, ''));
                 } else if (currentType === 'FAM') {
                     if (level === '1' && p[1] === 'HUSB') fam[currentId].husb = p[2].replace(/@/g, '');
                     if (level === '1' && p[1] === 'WIFE') fam[currentId].wife = p[2].replace(/@/g, '');
@@ -124,48 +157,64 @@
                 }
             });
 
-            // Step 2: Build strict hierarchies and mutual spouse links
+            // 2. Build JSON Hierarchy
+            const visited = new Set();
             const treeData = [];
-            for (const id in indi) {
-                const person = indi[id];
-                
-                // Replace blank names with the proper language string
-                let finalName = person.name;
-                if (!finalName || finalName === '') {
-                    finalName = textContent[lang].unknown;
-                }
+
+            function buildNode(personId) {
+                visited.add(personId);
+                const person = indi[personId];
+                if (!person) return null;
+
+                let finalName = person.name || textContent[lang].unknown;
 
                 const node = {
-                    id: person.id,
                     name: finalName,
-                    gender: person.gender,
-                    pids: []
+                    class: person.sex === 'F' ? "woman" : "man",
+                    marriages: []
                 };
 
-                // Strict Parent Links (fid = Father ID, mid = Mother ID)
-                if (person.famc.length > 0) {
-                    const familyId = person.famc[0];
-                    const family = fam[familyId];
-                    if (family) {
-                        if (family.husb) node.fid = family.husb;
-                        if (family.wife) node.mid = family.wife;
-                    }
-                }
-
-                // Strict Mutual Partner Links (forces them side-by-side)
-                for (const fId in fam) {
-                    const family = fam[fId];
-                    if (family.husb && family.wife) {
-                        if (person.id === family.husb && !node.pids.includes(family.wife)) {
-                            node.pids.push(family.wife);
-                        }
-                        if (person.id === family.wife && !node.pids.includes(family.husb)) {
-                            node.pids.push(family.husb);
-                        }
-                    }
-                }
+                // Find all families where this person is a parent
+                const families = Object.values(fam).filter(f => f.husb === personId || f.wife === personId);
                 
-                treeData.push(node);
+                families.forEach(f => {
+                    const spouseId = f.husb === personId ? f.wife : f.husb;
+                    if (spouseId) visited.add(spouseId);
+
+                    let spouseName = textContent[lang].unknown;
+                    let spouseClass = "woman"; 
+                    if (spouseId && indi[spouseId]) {
+                        spouseName = indi[spouseId].name || textContent[lang].unknown;
+                        spouseClass = indi[spouseId].sex === 'F' ? "woman" : "man";
+                    }
+
+                    const marriage = {
+                        spouse: { name: spouseName, class: spouseClass },
+                        children: []
+                    };
+
+                    f.chil.forEach(childId => {
+                        if (!visited.has(childId)) { // Drop down to children
+                            const childNode = buildNode(childId);
+                            if (childNode) marriage.children.push(childNode);
+                        }
+                    });
+
+                    node.marriages.push(marriage);
+                });
+                return node;
+            }
+
+            // 3. Find the earliest ancestors (roots) to start drawing from
+            for (let id in indi) {
+                if (indi[id].famc.length === 0 && !visited.has(id)) {
+                    // Only start branches from people who actually had families
+                    const isParent = Object.values(fam).some(f => f.husb === id || f.wife === id);
+                    if (isParent) {
+                        const rootNode = buildNode(id);
+                        if (rootNode) treeData.push(rootNode);
+                    }
+                }
             }
             return treeData;
         }
@@ -173,24 +222,30 @@
         window.renderTree = function() {
             if (!window.gedcomData) return;
             
-            const treeData = parseGEDCOMToFamilyTreeJS(window.gedcomData, window.currentLang);
+            const treeData = parseGEDCOMToDTree(window.gedcomData, window.currentLang);
             
-            document.getElementById('tree').innerHTML = '';
-            
-            // Build the professional tree structure with optimized spacing
-            familyTreeInstance = new FamilyTree(document.getElementById("tree"), {
-                mouseScrool: FamilyTree.action.zoom,
-                enableSearch: false,
-                template: 'tom', // A much tighter, cleaner template for spouses
-                layout: FamilyTree.layout.normal, // Enforces standard top-down brackets
-                siblingSeparation: 60, // Gives wider branches room to breathe
-                subtreeSeparation: 80,
-                levelSeparation: 120, // Increases the drop down distance to children
-                scaleInitial: FamilyTree.match.boundary, // Auto-zooms to fit
-                nodeBinding: {
-                    field_0: "name"
+            // Clear the container before drawing
+            document.getElementById('graph').innerHTML = '';
+
+            // Initialize the free D3-based engine
+            dTree.init(treeData, {
+                target: "#graph",
+                debug: false,
+                height: window.innerHeight - 100,
+                width: window.innerWidth,
+                callbacks: {
+                    nodeClick: function(name, extra) {}, // Required empty callback
+                    nodeRenderer: function(name, x, y, height, width, extra, id, nodeClass) {
+                        // Injects custom HTML for every node
+                        return "<div class='node " + nodeClass + "' style='width:100%;height:100%;'>" + name + "</div>";
+                    }
                 },
-                nodes: treeData
+                margin: { top: 60, right: 60, bottom: 60, left: 60 },
+                nodeWidth: 140,
+                styles: {
+                    linage: 'linage',
+                    marriage: 'marriage'
+                }
             });
         };
 
@@ -201,10 +256,12 @@
             document.getElementById('langToggle').innerText = langData.toggleBtn;
             document.getElementById('mainTitle').innerText = langData.title;
             document.getElementById('subTitle').innerText = langData.subTitle;
+            document.getElementById('instructionText').innerText = langData.instructions;
             
             window.renderTree();
         };
 
+        // Fetch data and launch
         fetch('tree.ged')
             .then(response => {
                 if (!response.ok) throw new Error("Could not find tree.ged");
@@ -215,7 +272,7 @@
                 window.renderTree();
             })
             .catch(err => {
-                document.getElementById('tree').innerHTML = `
+                document.getElementById('graph').innerHTML = `
                     <div style="padding: 20px; text-align: center; color: red;">
                         <h3>File Missing</h3>
                         <p>Ensure your GEDCOM file is named exactly <b>tree.ged</b> and is uploaded to the same folder as this website.</p>
