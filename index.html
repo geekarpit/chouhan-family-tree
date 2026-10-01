@@ -29,6 +29,7 @@
         header p { margin: 5px 0 0 0; font-size: 15px; color: #ecf0f1; }
         .instructions { margin-top: 8px; font-size: 13px; color: #bdc3c7; font-style: italic; }
         
+        /* Mobile-Responsive Button Layout */
         #langToggle {
             position: absolute;
             top: 20px;
@@ -43,6 +44,20 @@
             transition: background 0.3s;
         }
         #langToggle:hover { background-color: #c0392b; }
+
+        @media (max-width: 768px) {
+            header {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 15px 10px;
+            }
+            #langToggle {
+                position: static;
+                margin-bottom: 15px;
+            }
+            header h1 { font-size: 22px; }
+        }
         
         #graph-container {
             flex-grow: 1;
@@ -53,6 +68,15 @@
         }
         .mermaid { width: 100%; height: 100%; }
         .mermaid svg { width: 100% !important; height: 100% !important; }
+
+        /* Interactive Hover Effects for Nodes */
+        .node:hover rect {
+            stroke: #e74c3c !important;
+            stroke-width: 4px !important;
+            fill: #fdf2e9 !important;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
     </style>
 </head>
 <body>
@@ -61,14 +85,14 @@
         <button id="langToggle" onclick="toggleLanguage()">हिंदी में देखें</button>
         <h1 id="mainTitle">Chouhan's Family Tree</h1>
         <p id="subTitle">Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP</p>
-        <div class="instructions" id="instructionText">Scroll to zoom, click and drag to pan across the tree.</div>
+        <div class="instructions" id="instructionText">Scroll to zoom, click/touch to drag and explore. Hover over boxes to highlight.</div>
     </header>
 
     <div id="graph-container">
         <p id="loadingText" style="padding: 20px; text-align: center; font-size: 18px;">Loading family tree data...</p>
     </div>
 
-    <!-- We use ES Modules for the latest, most stable version of Mermaid -->
+    <!-- ES Modules for the latest stable Mermaid -->
     <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
         
@@ -87,7 +111,7 @@
                 toggleBtn: "हिंदी में देखें",
                 title: "Chouhan's Family Tree",
                 subTitle: "Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP",
-                instructions: "Scroll to zoom, click and drag to pan across the tree.",
+                instructions: "Scroll to zoom, click/touch to drag and explore. Hover over boxes to highlight.",
                 loading: "Loading family tree data...",
                 unknown: "Unknown"
             },
@@ -95,13 +119,53 @@
                 toggleBtn: "View in English",
                 title: "चौहान परिवार की वंशावली",
                 subTitle: "पनई से आए चौहान की वंशावली, ग्राम सदलीपुर, पोस्ट ईश्वरदास पुर, तहसील डलमऊ, ज़िला - रायबरेली, यूपी",
-                instructions: "ज़ूम करने के लिए स्क्रॉल करें, पेड़ पर नेविगेट करने के लिए क्लिक करके खींचें।",
+                instructions: "ज़ूम करने के लिए स्क्रॉल करें, नेविगेट करने के लिए खींचें। हाईलाइट करने के लिए बॉक्स पर टच करें।",
                 loading: "वंशावली डेटा लोड हो रहा है...",
                 unknown: "अज्ञात (Unknown)"
             }
         };
 
-        // NEW LOGIC: Combines Spouses into a single box to guarantee zero crossing lines
+        // Custom Phonetic Engine to translate English names to Hindi
+        function englishToHindi(name) {
+            if (!name) return "";
+            
+            // Core Dictionary for common exact matches in your tree
+            const dict = {
+                "chouhan": "चौहान", "singh": "सिंह", "ji": "जी", "bahadur": "बहादुर",
+                "pratap": "प्रताप", "ram": "राम", "bai": "बाई", "rajput": "राजपूत",
+                "parihar": "परिहार", "kushwah": "कुशवाह", "dodiya": "डोडिया",
+                "arpit": "अर्पित", "harshit": "हर्षित", "abhishek": "अभिषेक", "palak": "पलक",
+                "dilip": "दिलीप", "savita": "सविता", "shankar": "शंकर", "rajendra": "राजेन्द्र", 
+                "surendra": "सुरेन्द्र", "mahendra": "महेन्द्र", "ajay": "अजय", "vijay": "विजय", 
+                "sanjay": "संजय", "jagdish": "जगदीश", "thakur": "ठाकुर", "bhai": "भाई"
+            };
+
+            return name.split(' ').map(word => {
+                const lower = word.toLowerCase();
+                if (dict[lower]) return dict[lower];
+                
+                // Algorithmic phonetic fallback for unknown names
+                let res = lower;
+                res = res.replace(/sh/g, 'श').replace(/ch/g, 'च').replace(/kh/g, 'ख')
+                         .replace(/gh/g, 'घ').replace(/bh/g, 'भ').replace(/dh/g, 'ध')
+                         .replace(/th/g, 'थ').replace(/ph/g, 'फ');
+                
+                res = res.replace(/a/g, 'ा').replace(/i/g, 'ि').replace(/ee/g, 'ी')
+                         .replace(/u/g, 'ु').replace(/oo/g, 'ू').replace(/e/g, 'े')
+                         .replace(/o/g, 'ो').replace(/au/g, 'ौ').replace(/y/g, 'य');
+                
+                res = res.replace(/k/g, 'क').replace(/g/g, 'ग').replace(/j/g, 'ज')
+                         .replace(/t/g, 'त').replace(/d/g, 'द').replace(/n/g, 'न')
+                         .replace(/p/g, 'प').replace(/b/g, 'ब').replace(/m/g, 'म')
+                         .replace(/r/g, 'र').replace(/l/g, 'ल').replace(/v/g, 'व')
+                         .replace(/w/g, 'व').replace(/s/g, 'स').replace(/h/g, 'ह');
+                         
+                // Cleanup leading vowel markers
+                res = res.replace(/^ा/, 'अ').replace(/^ि/, 'इ').replace(/^े/, 'ए').replace(/^ो/, 'ओ');
+                return res;
+            }).join(' ');
+        }
+
         function parseGEDCOM(data, lang) {
             const lines = data.split('\n');
             const indi = {};
@@ -109,7 +173,6 @@
             let currentType = null;
             let currentId = null;
 
-            // 1. Read Data
             lines.forEach(line => {
                 const p = line.trim().split(/\s+/);
                 if (p.length < 2) return;
@@ -149,13 +212,15 @@
 
             const langData = textContent[lang];
 
-            // 2. Build Family Boxes (Husband & Wife combined)
             for (const fId in fam) {
                 const f = fam[fId];
                 if (!f.husb && !f.wife) continue;
 
-                let hName = (f.husb && indi[f.husb] && indi[f.husb].name) ? indi[f.husb].name : langData.unknown;
-                let wName = (f.wife && indi[f.wife] && indi[f.wife].name) ? indi[f.wife].name : langData.unknown;
+                let hNameRaw = (f.husb && indi[f.husb] && indi[f.husb].name) ? indi[f.husb].name : null;
+                let wNameRaw = (f.wife && indi[f.wife] && indi[f.wife].name) ? indi[f.wife].name : null;
+
+                let hName = hNameRaw ? (lang === 'hi' ? englishToHindi(hNameRaw) : hNameRaw) : langData.unknown;
+                let wName = wNameRaw ? (lang === 'hi' ? englishToHindi(wNameRaw) : wNameRaw) : langData.unknown;
 
                 let label = "";
                 if (f.husb && f.wife) label = `${hName}<br/>━ & ━<br/>${wName}`;
@@ -165,15 +230,14 @@
                 graph += `F_${fId}["${label}"]:::familyBox\n`;
             }
 
-            // 3. Build Single Individual Boxes (Unmarried Children)
             for (const iId in indi) {
                 if (!marriedIndividuals.has(iId)) {
-                    let nName = indi[iId].name || langData.unknown;
+                    let nNameRaw = indi[iId].name || null;
+                    let nName = nNameRaw ? (lang === 'hi' ? englishToHindi(nNameRaw) : nNameRaw) : langData.unknown;
                     graph += `I_${iId}["${nName}"]:::singleBox\n`;
                 }
             }
 
-            // 4. Draw Clean Links Drop-Down
             for (const fId in fam) {
                 const f = fam[fId];
                 f.chil.forEach(childId => {
@@ -233,7 +297,6 @@
             window.renderTree();
         };
 
-        // Fetch data with an explicit block detector
         fetch('tree.ged')
             .then(response => {
                 if (!response.ok) throw new Error("Could not find tree.ged");
@@ -244,18 +307,11 @@
                 window.renderTree();
             })
             .catch(err => {
-                let errorMsg = "Ensure your GEDCOM file is named exactly <b>tree.ged</b> and is uploaded to the same folder as this website.";
-                
-                if (window.location.protocol === 'file:') {
-                    errorMsg = "<b>SECURITY BLOCK:</b> You are opening this file directly from your computer. Web browsers block reading local files for security. <br><br><b>How to fix:</b> Upload this file and your tree.ged to GitHub Pages, and view it from your live GitHub link.";
-                }
-
                 document.getElementById('graph-container').innerHTML = `
                     <div style="padding: 30px; text-align: center; color: #c0392b;">
                         <h2>Error: Cannot Load File</h2>
-                        <p style="font-size: 16px;">${errorMsg}</p>
+                        <p>Ensure your GEDCOM file is named exactly <b>tree.ged</b> and is uploaded to GitHub Pages.</p>
                     </div>`;
-                console.error(err);
             });
     </script>
 </body>
