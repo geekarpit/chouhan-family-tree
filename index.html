@@ -4,19 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chouhan's Family Tree</title>
-    <!-- Mermaid.js for drawing the tree -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    <!-- SVG Pan Zoom for map-like navigation -->
-    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    <!-- FamilyTreeJS for professional genealogy layouts -->
+    <script src="https://balkan.app/js/FamilyTree.js"></script>
     <style>
-        body {
+        body, html {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f4f4f9;
-            margin: 0;
-            padding: 0;
             display: flex;
             flex-direction: column;
-            height: 100vh;
         }
         header {
             background-color: #2c3e50;
@@ -27,21 +26,9 @@
             z-index: 10;
             position: relative;
         }
-        header h1 {
-            margin: 0;
-            font-size: 26px;
-        }
-        header p {
-            margin: 5px 0 0 0; 
-            font-size: 15px; 
-            color: #ecf0f1;
-        }
-        .instructions {
-            margin-top: 8px;
-            font-size: 13px;
-            color: #bdc3c7;
-            font-style: italic;
-        }
+        header h1 { margin: 0; font-size: 24px; }
+        header p { margin: 5px 0 0 0; font-size: 14px; color: #ecf0f1; }
+        
         #langToggle {
             position: absolute;
             top: 20px;
@@ -55,23 +42,11 @@
             font-weight: bold;
             transition: background 0.3s;
         }
-        #langToggle:hover {
-            background-color: #c0392b;
-        }
-        #graph-container {
+        #langToggle:hover { background-color: #c0392b; }
+        
+        #tree {
+            width: 100%;
             flex-grow: 1;
-            width: 100%;
-            overflow: hidden;
-            background: white;
-            position: relative;
-        }
-        .mermaid {
-            width: 100%;
-            height: 100%;
-        }
-        .mermaid svg {
-            width: 100% !important;
-            height: 100% !important;
         }
     </style>
 </head>
@@ -81,23 +56,31 @@
         <button id="langToggle" onclick="toggleLanguage()">हिंदी में देखें</button>
         <h1 id="mainTitle">Chouhan's Family Tree</h1>
         <p id="subTitle">Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP</p>
-        <div class="instructions" id="instructionText">Scroll to zoom, click and drag to pan across the tree.</div>
     </header>
 
-    <div id="graph-container">
-        <p id="loadingText" style="padding: 20px; text-align: center;">Loading family tree data...</p>
-    </div>
+    <div id="tree"></div>
 
-    <script type="module">
-        mermaid.initialize({ 
-            startOnLoad: false, 
-            theme: 'default',
-            maxTextSize: 9000000, 
-            securityLevel: 'loose' 
-        });
+    <script>
+        window.currentLang = 'en';
+        window.gedcomData = null;
+        let familyTreeInstance = null;
 
-        // Parse the raw GEDCOM text into an interactive graph layout
-        function parseGEDCOM(data) {
+        const textContent = {
+            en: {
+                toggleBtn: "हिंदी में देखें",
+                title: "Chouhan's Family Tree",
+                subTitle: "Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP",
+                unknown: "Unknown"
+            },
+            hi: {
+                toggleBtn: "View in English",
+                title: "चौहान परिवार की वंशावली",
+                subTitle: "पनई से आए चौहान की वंशावली, ग्राम सदलीपुर, पोस्ट ईश्वरदास पुर, तहसील डलमऊ, ज़िला - रायबरेली, यूपी",
+                unknown: "अज्ञात (Unknown)"
+            }
+        };
+
+        function parseGEDCOMToFamilyTreeJS(data, lang) {
             const lines = data.split('\n');
             const indi = {};
             const fam = {};
@@ -113,7 +96,7 @@
                     if (p[2] === 'INDI') {
                         currentType = 'INDI';
                         currentId = p[1].replace(/@/g, '');
-                        indi[currentId] = { name: 'Unknown', sex: 'M' };
+                        indi[currentId] = { id: currentId, name: '', gender: 'male', pids: [], famc: [] };
                     } else if (p[2] === 'FAM') {
                         currentType = 'FAM';
                         currentId = p[1].replace(/@/g, '');
@@ -123,9 +106,15 @@
                     }
                 } else if (currentType === 'INDI') {
                     if (level === '1' && p[1] === 'NAME') {
-                        indi[currentId].name = p.slice(2).join(' ').replace(/\//g, '').replace(/"/g, '').trim();
+                        let parsedName = p.slice(2).join(' ').replace(/\//g, '').replace(/"/g, '').trim();
+                        if (parsedName !== '') indi[currentId].name = parsedName;
                     }
-                    if (level === '1' && p[1] === 'SEX') indi[currentId].sex = p[2];
+                    if (level === '1' && p[1] === 'SEX') {
+                        indi[currentId].gender = p[2] === 'F' ? 'female' : 'male';
+                    }
+                    if (level === '1' && p[1] === 'FAMC') {
+                        indi[currentId].famc.push(p[2].replace(/@/g, ''));
+                    }
                 } else if (currentType === 'FAM') {
                     if (level === '1' && p[1] === 'HUSB') fam[currentId].husb = p[2].replace(/@/g, '');
                     if (level === '1' && p[1] === 'WIFE') fam[currentId].wife = p[2].replace(/@/g, '');
@@ -133,118 +122,94 @@
                 }
             });
 
-            let graph = 'graph TD\n';
-            graph += 'classDef male fill:#cce5ff,stroke:#004085,stroke-width:2px;\n';
-            graph += 'classDef female fill:#f8d7da,stroke:#721c24,stroke-width:2px,rx:15,ry:15;\n';
-            graph += 'classDef marriage fill:#2c3e50,stroke:#2c3e50,stroke-width:0px;\n';
-
+            const treeData = [];
             for (const id in indi) {
-                const n = indi[id].name;
-                const s = indi[id].sex === 'F' ? 'female' : 'male';
-                if (n) {
-                    graph += `${id}["${n}"]:::${s}\n`;
+                const person = indi[id];
+                
+                // Identify the blank names and replace with "Unknown"
+                let finalName = person.name;
+                if (!finalName || finalName === '') {
+                    finalName = textContent[lang].unknown;
                 }
-            }
 
-            for (const id in fam) {
-                const f = fam[id];
-                const mNode = `${id}_m`;
+                const node = {
+                    id: person.id,
+                    name: finalName,
+                    gender: person.gender,
+                    pids: []
+                };
 
-                if (f.husb && f.wife) {
-                    graph += `${mNode}(( )):::marriage\n`;
-                    graph += `${f.husb} --- ${mNode}\n`;
-                    graph += `${f.wife} --- ${mNode}\n`;
-                    f.chil.forEach(c => {
-                        graph += `${mNode} --> ${c}\n`;
-                    });
-                } else if (f.husb) {
-                    f.chil.forEach(c => { graph += `${f.husb} --> ${c}\n`; });
-                } else if (f.wife) {
-                    f.chil.forEach(c => { graph += `${f.wife} --> ${c}\n`; });
+                // Link Parents accurately
+                if (person.famc.length > 0) {
+                    const familyId = person.famc[0];
+                    const family = fam[familyId];
+                    if (family) {
+                        if (family.husb) node.fid = family.husb;
+                        if (family.wife) node.mid = family.wife;
+                    }
                 }
+
+                // Link Spouses accurately
+                for (const fId in fam) {
+                    const family = fam[fId];
+                    if (family.husb === person.id && family.wife) {
+                        node.pids.push(family.wife);
+                    } else if (family.wife === person.id && family.husb) {
+                        node.pids.push(family.husb);
+                    }
+                }
+                
+                treeData.push(node);
             }
-            return graph;
+            return treeData;
         }
+
+        window.renderTree = function() {
+            if (!window.gedcomData) return;
+            
+            const treeData = parseGEDCOMToFamilyTreeJS(window.gedcomData, window.currentLang);
+            
+            document.getElementById('tree').innerHTML = '';
+            
+            // Build the professional tree structure
+            familyTreeInstance = new FamilyTree(document.getElementById("tree"), {
+                mouseScrool: FamilyTree.action.zoom,
+                enableSearch: false,
+                template: 'john',
+                nodeBinding: {
+                    field_0: "name"
+                },
+                nodes: treeData
+            });
+        };
+
+        window.toggleLanguage = function() {
+            window.currentLang = window.currentLang === 'en' ? 'hi' : 'en';
+            const langData = textContent[window.currentLang];
+            
+            document.getElementById('langToggle').innerText = langData.toggleBtn;
+            document.getElementById('mainTitle').innerText = langData.title;
+            document.getElementById('subTitle').innerText = langData.subTitle;
+            
+            window.renderTree();
+        };
 
         fetch('tree.ged')
             .then(response => {
                 if (!response.ok) throw new Error("Could not find tree.ged");
                 return response.text();
             })
-            .then(async (data) => {
-                const graphDef = parseGEDCOM(data);
-                const container = document.getElementById('graph-container');
-                container.innerHTML = `<div class="mermaid" id="familyGraph">${graphDef}</div>`;
-                
-                await mermaid.run({
-                    nodes: [document.getElementById('familyGraph')]
-                });
-
-                const svgElement = container.querySelector('svg');
-                if (svgElement) {
-                    svgPanZoom(svgElement, {
-                        controlIconsEnabled: true,
-                        zoomEnabled: true,
-                        panEnabled: true,
-                        minZoom: 0.1,
-                        maxZoom: 10,
-                        fit: true,
-                        center: true
-                    });
-                }
+            .then(data => {
+                window.gedcomData = data;
+                window.renderTree();
             })
             .catch(err => {
-                document.getElementById('graph-container').innerHTML = `
+                document.getElementById('tree').innerHTML = `
                     <div style="padding: 20px; text-align: center; color: red;">
-                        <h3 id="errorTitle">File Missing</h3>
-                        <p id="errorDesc">Ensure your GEDCOM file is named exactly <b>tree.ged</b> and is uploaded to the same folder as this website.</p>
+                        <h3>File Missing</h3>
+                        <p>Ensure your GEDCOM file is named exactly <b>tree.ged</b> and is uploaded to the same folder as this website.</p>
                     </div>`;
-                console.error(err);
             });
-    </script>
-
-    <!-- Language Toggle Logic -->
-    <script>
-        let currentLang = 'en';
-
-        const textContent = {
-            en: {
-                toggleBtn: "हिंदी में देखें",
-                title: "Chouhan's Family Tree",
-                subTitle: "Panai se aaye Chouhan ki Vanshawali, Gram Sadlipur, Post Ishwardas Pur, Tehsil Dalmau, Zila - Raibarelli, UP",
-                instructions: "Scroll to zoom, click and drag to pan across the tree.",
-                loading: "Loading family tree data...",
-                errTitle: "File Missing",
-                errDesc: "Ensure your GEDCOM file is named exactly <b>tree.ged</b> and is uploaded to the same folder as this website."
-            },
-            hi: {
-                toggleBtn: "View in English",
-                title: "चौहान परिवार की वंशावली",
-                subTitle: "पनई से आए चौहान की वंशावली, ग्राम सदलीपुर, पोस्ट ईश्वरदास पुर, तहसील डलमऊ, ज़िला - रायबरेली, यूपी",
-                instructions: "ज़ूम करने के लिए स्क्रॉल करें, पेड़ पर नेविगेट करने के लिए क्लिक करके खींचें।",
-                loading: "वंशावली डेटा लोड हो रहा है...",
-                errTitle: "फ़ाइल नहीं मिली",
-                errDesc: "सुनिश्चित करें कि आपकी GEDCOM फ़ाइल का नाम ठीक <b>tree.ged</b> है और यह इस वेबसाइट के समान फ़ोल्डर में अपलोड की गई है।"
-            }
-        };
-
-        function toggleLanguage() {
-            currentLang = currentLang === 'en' ? 'hi' : 'en';
-            
-            document.getElementById('langToggle').innerText = textContent[currentLang].toggleBtn;
-            document.getElementById('mainTitle').innerText = textContent[currentLang].title;
-            document.getElementById('subTitle').innerText = textContent[currentLang].subTitle;
-            document.getElementById('instructionText').innerText = textContent[currentLang].instructions;
-            
-            const loadingEl = document.getElementById('loadingText');
-            if(loadingEl) loadingEl.innerText = textContent[currentLang].loading;
-
-            const errTitleEl = document.getElementById('errorTitle');
-            if(errTitleEl) errTitleEl.innerText = textContent[currentLang].errTitle;
-            
-            const errDescEl = document.getElementById('errorDesc');
-            if(errDescEl) errDescEl.innerHTML = textContent[currentLang].errDesc;
-        }
     </script>
 </body>
 </html>
